@@ -1,0 +1,887 @@
+---
+title: "STA141B Project 2"
+output: pdf_document
+date: "2023-04-27"
+editor_options: 
+  markdown: 
+    wrap: sentence
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, cache = TRUE)
+```
+
+```{r, include=FALSE}
+install.packages("tidyverse",repos = "http://cran.us.r-project.org")
+library(tidyverse)
+source("getCaptures.R")
+load("my_work_space.RData")
+```
+
+First, we will begin by reading in the five different tables from the MergedAuth log file.
+I received help from Piazza to find the best method to do this: using cumsum().
+Essentially, we can use the cumulative sum in conjunction with grepl to find each occurence of the table title pattern.
+Grepl returns true and false values for each index where the pattern matches and cumsum uses this to denote the start of a new table.
+
+The pattern we use to match each line, "\^# [\^ ]+", can be broken down.
+"\^" denotes that the pattern must match at the start of the line.
+"\#" is the literal character, as each title begins with it.
+[ ] indicates a set of characters, but the "\^" is a negation, not a starting signal.
+This means that we want to match for any characters that are not a space.
+Lastly, the + indicates that we want to match the set at least once.
+I got this from the rx code written in the readTableApproach.R file.
+
+Otherwise, \# luckily only occurs mid-line in the file, and we get exactly five matches.
+
+Split then uses the location of cumsum increases to create a new table.
+Lastly, we remove the first entry as it is a white space before the first match is located.
+
+We have to make some changes to our regex expression here.
+Now, some of the app names have a dash in between.
+Therefore, instead of allowing only letters, we take any type of character.
+In addition, we need to find a way to process a colon in the case that it does not have the bracket expression and the colon arrives immediately after sudo.
+
+```{r}
+setwd('C:/Users/HP/Documents/STA 141B/STA141B_Project2/')
+ll = readLines('MergedAuth.log')
+
+starts = cumsum(grepl("^# [^ ]+", ll))
+table_list = split(ll, starts)
+
+table_list = table_list[-1]
+length(table_list)
+str(table_list)
+
+# Now, we split up each table.
+
+auth.log = table_list[1]
+auth2.log = table_list[2]
+linux_2k.log = table_list[3]
+mac_2k.log = table_list[4]
+ssh_2k.log = table_list[5]
+
+#Next, we convert it from lists into dataframes. Our full string is listed under
+#one variable, and it is now our job to begin to break it up into multiple 
+#variables.
+source("getCaptures.R")
+
+#Collaborated with Michael Karim
+
+#This pattern went through many alterations. This is the final version as it is 
+#used to read in all of the tables. The primary alterations that I can think of 
+#off the top of my head:
+
+#Adding an optional whitespace to the datetime to allow for extra spacing on 
+#some tables
+
+#Creating the conditional for reading in the IP address. This was necessary for
+#the third table, where the logging host is simply "combo". It does not take in 
+#any numbers, so it has to be recorded as words only.
+
+#Initially, the app name took in a string. However, with the addition of dashes 
+#and other various characters, I simply let it take anything. To be completely 
+#honest, I do not know how this question mark works; I simply tested around with 
+#it as I needed to be able to reach the ":" when the PID did not exist 
+#(when app = sudo).
+
+# The bracketed PID underwent the most editing. Because of the addition of sudo 
+#in auth2.log, many lines do not have a PID # at all. The ?: at the start and 
+#the ? at the end make this section optional.
+
+#The last segment simply reads in all possible characters after the ":". 
+
+#For clarity without messing up rx expression:
+#rx_test = "^([a-zA-Z]+ \\s*[0-9]+ [0-9]{2}:[0-9]{2}:[0-9]{2}) ([\\w-]+|[a-zA-Z]
+#+-[0-9-]+) (.*?)(?:\\[([0-9]+)\\])?:* (.*)"
+
+rx_test = "^([a-zA-Z]+ \\s*[0-9]+ [0-9]{2}:[0-9]{2}:[0-9]{2}) ([\\w-]+|[a-zA-Z]+-[0-9-]+) (.*?)(?:\\[([0-9]+)\\])?:* (.*)"
+
+data_prep <- function(file) {
+  file = as.data.frame(file)
+  file = file[-1,]
+  file = file[-length(file)]
+  file
+}
+
+table_test_function <- function(rx, file) {
+  w = grepl(rx, file, perl = TRUE)
+  print(table(w))
+  m = gregexpr(rx, file, perl = TRUE)
+  print(table(sapply(m, length)))
+  print(table(sapply(m, `[`, 1) == 1))
+  s = attr(m[[1]], "capture.start")
+  substring(file[1], s, s + attr(m[[1]], "capture.length"))
+}
+
+table_create <- function(rx, file) {
+  caps = getCaptures(rx, file, row.names = NULL)
+  dim(caps)
+  var_names = c("date-time", "logging host", "app", "PID", "message")
+  colnames(caps) = var_names
+  file_name <- rep(deparse(substitute(file)), nrow(caps))
+#Suggested by ChatGPT to get the name of the file passed in, rather than accessing the file itself
+  caps <- cbind(caps, file_name)
+  caps
+}
+
+#For running the file in final iteration
+
+auth.log = data_prep(table_list[1])
+table_test_function(rx_test, auth.log)
+auth.log = table_create(rx_test, auth.log)
+
+
+auth2.log = data_prep(table_list[2])
+table_test_function(rx_test, auth2.log)
+auth2.log = table_create(rx_test, auth2.log)
+
+linux_2k.log = data_prep(table_list[3])
+table_test_function(rx_test, linux_2k.log)
+linux_2k.log = table_create(rx_test, linux_2k.log)
+
+mac_2k.log = data_prep(table_list[4])
+table_test_function(rx_test, mac_2k.log)
+mac_2k.log = table_create(rx_test, mac_2k.log)
+
+ssh_2k.log = data_prep(table_list[5])
+table_test_function(rx_test, ssh_2k.log)
+ssh_2k.log = table_create(rx_test, ssh_2k.log)
+
+
+
+```
+
+```{r}
+
+merged_auth = rbind(auth.log, auth2.log, linux_2k.log, mac_2k.log, ssh_2k.log)
+
+```
+
+### Data Validation and Exploration
+
+The first thing that we want to check is for lines where there is no app or PID provided so that we can set their corresponding value to NA.
+
+```{r}
+
+missing_values <- function(file) {
+  missing_values <- is.na(file$app)
+  print(sum(missing_values))
+  is.na(file$PID) <- file$PID == ""
+  missing_values <- is.na(file$PID)
+  print(sum(missing_values))
+  return(file)
+}
+
+merged_auth <- missing_values(merged_auth)
+
+```
+
+Convert PID to integer
+
+```{r}
+
+merged_auth$PID = as.integer(merged_auth$PID)
+
+```
+
+Convert date-time to POSIXct
+
+```{r}
+
+merged_auth$`date-time` = as.POSIXct(strptime(merged_auth$`date-time`, "%b %d %H:%M:%S"))
+
+table(is.na(merged_auth$`date-time`))
+
+```
+
+Great.
+We did not create any NA values during coercion.
+
+This coerced in the year 2023 into our datetime as it is needed for a POSIXct datatype.
+As there is no date provided to us, we will just proceed forward using this value.
+
+How many lines are in each log file?
+Now is a great time to split apart our merged_auth file again based on their file_name.
+We need to do this for individual computations like the range of dates for each log-file and log-file specific valid/invalid log-in attempts.
+
+```{r}
+
+auth.log = merged_auth %>% filter(file_name == "auth.log") %>% 
+  select(`date-time`, `logging host`, app, PID, message)
+
+auth2.log = merged_auth %>% filter(file_name == "auth2.log") %>%
+  select(`date-time`, `logging host`, app, PID, message) 
+linux_2k.log = merged_auth %>% filter(file_name == "linux_2k.log") %>%
+  select(`date-time`, `logging host`, app, PID, message)
+
+mac_2k.log = merged_auth %>% filter(file_name == "mac_2k.log") %>%
+  select(`date-time`, `logging host`, app, PID, message) 
+
+ssh_2k.log = merged_auth %>% filter(file_name == "ssh_2k.log") %>%
+  select(`date-time`, `logging host`, app, PID, message) 
+
+dim(auth.log)
+dim(auth2.log)
+dim(linux_2k.log)
+dim(mac_2k.log)
+dim(ssh_2k.log)
+
+```
+
+After we removed the empty lines and the filename line, auth.log has 86,839 total lines.
+That's hefty!
+Auth2.log has the second most lines with 7121 rows.
+Linux_2k.log, mac_2k.log, and ssh_2k.log all have 1999 lines each.
+
+What are the range of date-times for the messages?
+For each of the different log files in the combined file?
+How many days does each log file span?
+
+An interesting (perhaps obvious) quirk about log files is that they appear in chronological order.
+Therefore, we can simply look at the date-time of the last message and subtract it by the first message to get the total time elapsed in between log processing.
+POSIXct does this handling for us!
+
+```{r}
+
+date_range <- function(file) {
+last_line = tail(file, n= 1)
+first_line = head(file, n= 1)
+last_line$`date-time`
+first_line$`date-time`
+last_line$`date-time` - first_line$`date-time`
+}
+
+date_range(auth.log)
+date_range(auth2.log)
+date_range(linux_2k.log)
+date_range(mac_2k.log)
+date_range(ssh_2k.log)
+
+```
+
+From this, we see that the first date in auth.log is November 30th, and the last date is December 31st.
+By subtracting the two values, we see that there is an overall time difference of 31.65889 days.
+
+We repeat this process for each file.
+For auth2.log, we get a difference of 24.0469 days.
+Linux_2k.log = 42.976 mac_2k.log = 6.965 Astoundingly, the ssh_2k.log only spans 4.149 hours!
+That speaks to how many operations occur with a server in a short amount of time.
+
+Next, we will investigate the application names.
+Do the application names contain numbers?
+If so, are they just versions, e.g. ssh2, or is there additional structure to the numbers?
+
+First, we look at how many unique names there are.
+
+```{r}
+head(unique(auth.log$app))
+
+unique(auth2.log$app)
+
+head(unique(linux_2k.log$app))
+length(unique(linux_2k.log$app))
+
+head(unique(mac_2k.log$app))
+length(unique(mac_2k.log$app))
+
+unique(ssh_2k.log$app)
+
+```
+
+We clearly see that in the auth.log file, there are only two types of application names.
+This will change in the other files.
+Auth2 has 9 different application names, but none of them have numbers involved.
+Linux_2k is the first to introduce lines with no app names.
+It also balloons up the total application name total to 30.
+
+Mac_2K takes this a step further with 66 total application names.
+Clearly, the internal processes of this Mac server are much more complex than the first two files.
+
+Lastly, ssh_2k.log returns to the most simple form of only having sshd processes.
+
+Is the host value constant/the same for all records in each log file?
+
+```{r}
+length(unique(auth.log$`logging host`))
+length(unique(auth2.log$`logging host`))
+length(unique(linux_2k.log$`logging host`))
+length(unique(mac_2k.log$`logging host`))
+length(unique(ssh_2k.log$`logging host`))
+
+head(unique(mac_2k.log$`logging host`),n = 10)
+```
+
+Here, we have a constant logging host value for every log file, except for Mac.
+Mac has 38 different logging hosts!
+For the most part, this is calvisitor or airbears users with different IPs.
+I assume this is a webserver that local Cal Berkeley students were able to connect to frequently.
+
+What are the most common apps (daemons/programs) that are logging information on each of the different hosts?
+
+```{r}
+sort(table(auth.log$app), decreasing = TRUE)
+head(sort(table(auth2.log$app), decreasing = TRUE))
+head(sort(table(linux_2k.log$app), decreasing = TRUE))
+head(sort(table(mac_2k.log$app), decreasing = TRUE))
+head(sort(table(ssh_2k.log$app), decreasing = TRUE))
+
+```
+
+For auth.file: sshd is by far the most commonly used app with 85x more appearances than CRON.
+
+According to Google, the cron command-line utility is a job scheduler on Unix-like operating systems.
+It is done for resource management on the OS level.
+sshd is an OpenSSH server process.
+This is most likely for any server maintenance or operations for one of the professor's webpages.
+
+Auth2.log sees sshd having the lion share, with 4x more than the next most popular.
+Linux_2k.log sees ftpd having the most, closely followed by sshd(pam_unix).
+Mac_2k.log mostly has kernel commands by a 7x margin over the second most populous.
+Interestingly, despite the large variety of apps that it runs, it is not very evenly distributed.
+ssh_2k.log again only runs sshd apps.
+
+## Logins - valid and invalid
+
+We want to test around with a few keywords, like error, failed, or invalid.
+Invalid often begins at the start of strings but also will appear in the middle, so we should check for both cases.
+
+#### Auth.log1
+
+```{r}
+invalid = grep("Invalid ", auth.log$message)
+head(auth.log$message[invalid], n = 1)
+
+failed = grep(" failed ", auth.log$message)
+head(auth.log$message[failed], n = 1)
+
+error = grep("error", auth.log$message)
+head(auth.log$message[error], n = 1)
+
+idx = grep(" invalid ", auth.log$message)
+head(auth.log$message[idx], n = 1)
+
+length(invalid) + length(error) + length(failed) + length(idx)
+
+Accepted = grep("Accepted ", auth.log$message)
+length(Accepted)
+
+new = grep("New ", auth.log$message)
+length(new)
+
+
+```
+
+Overall, there are 29,727 errors/failures.
+Any message marked as "fail" comes from a message with format "reverse mapping checking getaddrinfo for 118.11.26.218.internet.sx.cn [218.26.11.118] failed - POSSIBLE BREAK-IN ATTEMPT!".
+
+When checking for key phrases New or Accepted, we can see that no outside users were able to join the server.
+The only person able to access the server is the root-user.
+This is shown by all of the CRON messages.
+Given that our logging host only has one IP, the only person capable of accessing the server is 172.31.27.153.
+
+```{r}
+
+cron = auth.log$message[(auth.log$app == "CRON")]  
+head(auth.log$`logging host`, n = 1)
+
+sudo = linux_2k.log[linux_2k.log$app == "sudo",]
+  
+```
+
+There are equal number of "Invalid" and " invalid " strings.
+The first Invalid string marks the IP address that attempts to connect ("Invalid user admin from 187.12.249.74"), and the second invalid string describes the input_userauth_request failure ("input_userauth_request: invalid user admin [preauth]" ).
+
+We will look only at the first Invalid batch and extract the IP addresses from the string.
+
+```{r}
+library(stringr)
+w = grepl("^Invalid.*([0-9.]+)$", auth.log$message)
+table(w)
+#This matches the length of the invalid column before.
+bad_login = auth.log$message[w]
+length(bad_login)
+head(bad_login)
+
+pattern="([0-9.]+)$"
+ips =str_extract(bad_login,pattern)
+
+head(unique(ips))
+length(unique(ips))
+
+ip_table = sort(table(ips), decreasing = TRUE)
+
+head(ip_table, n = 20)
+
+```
+
+Clearly, we see a lot of repeated attempts from IPs to unsuccessfully login to the server.
+In the most popularly used IP, we see a wide variety of different usernames that try to login.
+
+```{r}
+w = grepl("188.87.35.25", bad_login)
+table(w)
+user_extract = bad_login[w]
+
+
+pattern="^Invalid user ([a-zA-Z]+)"
+user_name =str_extract(user_extract,pattern)
+head(user_name)
+
+pattern="([a-zA-Z]+)$"
+user_name_final =str_extract(user_name,pattern)
+head(user_name_final)
+
+sort(table(user_name_final), decreasing = TRUE)
+length(unique(user_name_final))
+
+```
+
+In the most popularly used IP, they attempt to login with 42 different usernames.
+Many of these usernames are also repeated on different IPs.
+Usernames like test, guest, and sysadmin frequently pop up for each table.
+
+#### Auth2.log
+
+I went about this file a different, and much more arduous way.
+This was the revised method I came up with, but it is still very inefficient.
+As a result, my analysis for the other files will be greatly reduced (as I simply do not have the time for it.)
+
+```{r}
+invalid = grep("Invalid ", auth2.log$message)
+length(invalid)
+head(auth2.log$message[invalid], n = 1)
+
+failed = grep("Failed ", auth2.log$message)
+df_failed <- as.data.frame(auth2.log$message[failed], col.names = "X1")
+length(failed)
+head(auth2.log$message[failed], n = 1)
+
+error = grep("error", auth2.log$message)
+length(error)
+head(auth2.log$message[error], n = 1)
+
+#Previously, we just tested for invalid inside a string. This no longer gives us unique values, however. There is a large overlap with "Failed" and error messages when an account is registered as an invalid user
+
+idx = grep("input_userauth_request", auth2.log$message)
+length(idx)
+head(auth2.log$message[idx], n = 1)
+
+df_idx <- as.data.frame(auth2.log$message[idx])
+df_error <- as.data.frame(auth2.log$message[error])
+df_invalid <- as.data.frame(auth2.log$message[invalid])
+df_failed <- as.data.frame(auth2.log$message[failed])
+
+names(df_idx) <- "X1"
+names(df_error) <- "X1"
+names(df_invalid) <- "X1"
+names(df_failed) <- "X1"
+
+#VALID Logins
+
+Accepted = grep("Accepted ", auth2.log$message)
+length(Accepted)
+head(auth2.log$message[Accepted], n = 1)
+
+
+new = grep("New ", auth2.log$message)
+length(new)
+head(auth2.log$message[new], n = 1)
+
+connection_from = grep("Connection from", auth2.log$message)
+df_con_from <- as.data.frame(auth2.log$message[connection_from])
+
+length(connection_from)
+head(auth2.log$message[connection_from], n = 1)
+
+valid = length(Accepted) + length(connection_from) + length(new)
+
+#does not work, return to later
+
+df_con_from <- as.data.frame(auth2.log$message[connection_from])
+df_Accepted <- as.data.frame(auth2.log$message[Accepted])
+df_new <- as.data.frame(auth2.log$message[new])
+
+names(df_new) <- "X1"
+names(df_Accepted) <- "X1"
+names(df_con_from) <- "X1"
+
+```
+
+Overall, there are 1,262 invalid logins, demarcated by Invalid, Failed, or error.
+Any message marked as "fail" comes from a message with format "Failed publickey for elastic_user_8".
+Any message marked as "Invalid" has a message similar to Invalid user support from 95.152.57.58" or "input_userauth_request: invalid user support [preauth]". For errors, the message reads "error: maximum authentication attempts exceeded for root from".
+
+For valid logins, we check three key phrases: Accepted, New, and "Connection from".
+In total, we get 470 valid logins.
+Some example messages are: "New session 1 of user ubuntu", "Connection from 85.245.107.41 port 61663 on 10.77.20.248 port 222", and "Accepted publickey for ubuntu from 85.245.107.41 port 54259 ssh2: RSA SHA256:Kl8kPGZrTiz7g4FO1hyqHdsSBBb5Fge6NWOobN03XJg".
+
+For a singular user, it is possible for them to receive multiple of these messages.
+We will now get the usernames and IPs that have valid logins.
+We previously combined all of the valid results, but we want to look at each individual table and run their specific regex to pull out all of the valid IPs and usernames.
+
+Let's start first with the "New session" messages to get the usernames.
+
+```{r}
+#Exact regex pattern for lines in "New session" dataset
+username <- sub(".*\\b(user|seat)\\s+(\\w+)\\b.*", "\\2", df_new$X1)
+username = as.data.frame(username)
+
+new_user_table <- username %>% group_by(username) %>% summarise(count = n()) %>% arrange(desc(count)) 
+head(new_user_table)
+length(unique(new_user_table$username))
+
+```
+
+Here, we see that there are 12 unique usernames used for creating a new session.
+
+```{r}
+pattern="([0-9]+\\.){3}[0-9]+"
+ips =str_extract(df_Accepted$X1,pattern)
+ips = as.data.frame(ips)
+
+accepted_ips_table <- ips %>% group_by(ips) %>% summarise(count = n()) %>% arrange(desc(count))
+head(accepted_ips_table)
+length(unique(accepted_ips_table$ips))
+
+```
+
+Interestingly, looks like only four total IPs were able to login without error.
+85.245.107.41 connected an eyebrow-raising 174 times.
+24.151.103.17 logged in 47 times, and the last two landed a meager 5 times combined.
+
+```{r}
+
+pattern="([0-9]+\\.){3}[0-9]+"
+ips =str_extract(df_con_from$X1,pattern)
+ips = as.data.frame(ips)
+
+
+con_ips_table <- ips %>% group_by(ips) %>% summarise(count = n()) %>% arrange(desc(count))
+head(con_ips_table)
+length(unique(con_ips_table$ips))
+
+```
+
+We found a total of 5 unique IPs in this data, and 3 new IPs, therefore bringing the total up to 7.
+Now, we will look at invalid attempts.
+
+input_userauth_request: invalid users
+
+```{r}
+
+username_idx <- sub(".*\\buser\\s+(\\w+| ).*", "\\1", df_idx$X1)
+username_idx = as.data.frame(username_idx)
+
+
+idx_user_table <- username_idx %>% group_by(username_idx) %>% summarise(count = n()) %>% arrange(desc(count)) %>% rename(username = username_idx)
+head(idx_user_table)
+length(unique(idx_user_table$username))
+
+```
+
+41 different usernames attempted and failed to login.
+Admin and " " (accounts without usernames) held the large majority of these attempts.
+
+errors: maximum authentication attempts
+
+```{r}
+
+pattern="([0-9]+\\.){3}[0-9]+"
+ips =str_extract(df_error$X1,pattern)
+ips = as.data.frame(ips)
+
+
+error_ips_table <- ips %>% group_by(ips) %>% summarise(count = n()) %>% arrange(desc(count))
+head(error_ips_table)
+length(unique(error_ips_table$ips))
+
+```
+
+141 different IPs attempted to connect and exceeded the maximum authentication attempts.
+Some IPs, like 49.4.143.105, exceeded this amount 20 times!
+
+Failed passwords/publickeys
+
+```{r}
+
+pattern="([0-9]+\\.){3}[0-9]+"
+ips =str_extract(df_failed$X1,pattern)
+ips = as.data.frame(ips)
+
+failed_ips_table <- ips %>% group_by(ips) %>% summarise(count = n()) %>% arrange(desc(count))
+head(failed_ips_table)
+length(unique(failed_ips_table$ips))
+
+```
+
+105 different IPs attempted and failed to connect to the server.
+24.151.103.17 had 157 different failures to access the server.
+Perhaps the most interesting thing to us is that 85.245.107.41, the IP with the most successful connections, racked up 15 failures here.
+
+Invalid logins
+
+I think this data will be the most interesting because we are retrieving both username and IP.
+
+```{r}
+
+
+invalid = grep("Invalid ", auth2.log$message)
+length(invalid)
+head(auth2.log$message[invalid], n = 1)
+df_invalid <- as.data.frame(auth2.log$message[invalid])
+names(df_invalid) <- "X1"
+
+pattern="^Invalid user (\\w*|\\s+) from (([0-9]+\\.){3}[0-9]+)"
+
+w = grepl(pattern, df_invalid$X1, perl = TRUE)
+table(w)
+m = gregexpr(pattern, df_invalid$X1, perl = TRUE)
+
+invalid = getCaptures(pattern, df_invalid$X1, row.names = NULL)
+invalid = invalid[-3]
+
+users_table_extra <- invalid %>% group_by(V1) %>% summarise(No_of_Different_IPs = n_distinct(V2), Total_Appearances = n()) %>% arrange(desc(No_of_Different_IPs)) %>% rename(Usernames = V1)
+
+#The most_popular_username code was supplied by ChatGPT. I could not get slice_max to work in order to retrieve the name of the highest occuring username for each IP.
+
+ips_table_extra <- invalid %>% group_by(V2) %>% summarise(No_of_Distinct_Users = n_distinct(V1), Total_Appearances = n(), most_popular_username = names(sort(table(V1),decreasing = TRUE)[1]), login_attempt_count = sort(table(V1),decreasing = TRUE)[1]) %>% arrange(desc(No_of_Distinct_Users)) %>% rename(IPs = V2)
+
+inv_user_table <- invalid %>% group_by(V1) %>% summarise(count = n()) %>% arrange(desc(count)) %>% rename(username = V1)
+
+inv_ips_table <- invalid %>% group_by(V2) %>% summarise(count = n()) %>% arrange(desc(count)) %>% rename(ips = V2)
+
+
+head(ips_table_extra)
+head(users_table_extra)
+
+length(unique(invalid$V1))
+length(unique(invalid$V2))
+
+```
+
+There are 41 different usernames and 68 different IP addresses.
+Admin appeared a total of 45 times on 35 different IPs.
+Once we venture into the IPs table, we see that 91.197.232.109 was by far the most popular, with 24 different users and 58 total appearances.
+The admin user on this IP attempted to login 10 different times.
+
+Now, we will combine all of the valid/invalid IP and user data into two separate tables to see how they truly breakdown.
+I originally went with left_join, but it did not work as I hoped given that some IPs were not located in the initial dataset.
+
+```{r}
+
+ips_list <- accepted_ips_table %>% full_join(con_ips_table, by = "ips")  %>% full_join(error_ips_table, by = "ips")  %>% full_join(failed_ips_table, by = "ips")  %>% full_join(inv_ips_table, by = "ips") %>% mutate_at(vars(matches("^count")), ~replace_na(.,0))
+
+names(ips_list) = c("IP Address","Accepted", "Connected", "Error", "Failed", "Invalid")
+ips_list <- cbind(ips_list, Total = rowSums(ips_list[,2:6]))
+ips_list <- ips_list %>% arrange(desc(Total))
+head(ips_list)
+
+
+var_list <- new_user_table %>% full_join(idx_user_table, by = "username")  %>% full_join(inv_user_table, by = "username") %>% mutate_at(vars(matches("^count")), ~replace_na(.,0))
+
+names(var_list) = c("Username","New", "IDX", "Invalid")
+var_list <- cbind(var_list, Total = rowSums(var_list[,2:4]))
+var_list <- var_list %>% arrange(desc(Total))
+head(var_list)
+
+
+```
+
+For the most part, this checks out.
+I, however, failed to remember that IDX and Invalid will appear the same amount of times.
+They are technically both invalid login messages, but are presented in different formats.
+Interestingly, for blank accounts, it does not know to combine them together.
+Regardless, for the future, we will not scan for the lowercase invalid messages.
+
+Having all of our data in one place for the IPs is great.
+While 85.245.107.41 has by far the most accepted values, it actually has less total pop-ups in the log.
+This is because 24.151.103.17 has 47 acceptances, but 157 failures!
+These two IPs have by far the most content.
+
+This process was incredibly lengthy.
+Since I delved into data insights at each step of the way, I do not want to go through and delete these.
+For future logs, however, I will simply only look at the final four tables.
+I like to see the insights for the joint user and IP tables from Invalid.
+Beyond that, we will just look at the two final summary tables.
+
+#### linux_2k.log
+
+For this file, we are going to look for four keywords: failure, unknown, opened, and connection.
+Opened is to find the strings for session opened, which implies that a user logs in.
+Unknown is for messages like "check pass; user unknown", where someone fails to log-in.
+
+Check pass will simply be counted, as there is no IP or username to retrieve.
+Connection provides us with an IP and session provides us with a username.
+Unfortunately, there is no way to connect these two.
+Failure provides us with a user field, but this does not appear in every row.
+
+```{r}
+
+head(linux_2k.log$message, n = 50)
+
+#Invalid
+#failure
+failure = grep("failure", linux_2k.log$message)
+df_failure <- linux_2k.log$message[failure]
+df_failure = strsplit(df_failure,' ')
+#We need to get rid of the lines that do not have the user element.
+df_failure_users <- lapply(df_failure, function(x) if(length(x) >= 10) x[10])
+df_failure_users <- df_failure_users[sapply(df_failure_users, Negate(is.null))]
+df_failure_users <- unlist(df_failure_users)
+df_failure_users = strsplit(df_failure_users, '=')
+df_failure_users <- lapply(df_failure_users, function(x) x[2])
+df_failure_users <- unlist(df_failure_users)
+sort(table(df_failure_users), decreasing = TRUE)
+#351 instances of root, 17 of guest, and 4 of test
+
+#unknown
+
+unknown = grep("unknown", linux_2k.log$message)
+df_unknown <- linux_2k.log$message[unknown]
+length(df_unknown)
+#118 occurences of unknown users
+
+
+#Valid
+
+#opened
+
+opened = grep("opened", linux_2k.log$message)
+df_opened <- linux_2k.log$message[opened]
+df_opened = strsplit(df_opened,' ')
+df_opened_users <- lapply(df_opened, function(x) x[5])
+df_opened_users <- unlist(df_opened_users)
+sort(table(df_opened_users), decreasing = TRUE)
+# 43 successes for cyrus and news; 36 successful sessions for test, and 1 successful session for root
+
+#Connection
+
+connection = grep("connection", linux_2k.log$message)
+df_connection <- linux_2k.log$message[connection]
+df_connection = strsplit(df_connection,' ')
+df_connection_ip <- lapply(df_connection, function(x) x[3])
+df_connection_ip <- unlist(df_connection_ip)
+head(sort(table(df_connection_ip), decreasing = TRUE), n = 6)
+
+```
+
+#### mac_2k.log
+
+As far as I can tell, this log file's messaging has no rhyme or reason to it.
+There are very little repeated patterns, and searches for user and IP keywords provided little information.
+
+#### ssh_2k.log
+
+```{r}
+
+failed = grep("Failed ", ssh_2k.log$message)
+error = grep("error", ssh_2k.log$message)
+idx = grep("input_userauth_request", ssh_2k.log$message)
+#I had troubles reading in Invalid, but idx catches every username that fails to connect; this was proven by the numbers in auth2.log
+
+
+df_idx <- as.data.frame(ssh_2k.log$message[idx])
+df_error <- as.data.frame(ssh_2k.log$message[error])
+df_failed <- as.data.frame(ssh_2k.log$message[failed])
+names(df_idx) <- "X1"
+names(df_error) <- "X1"
+names(df_failed) <- "X1"
+
+#error
+pattern="([0-9]+\\.){3}[0-9]+"
+ips =str_extract(df_error$X1,pattern)
+ips = as.data.frame(ips)
+head(sort(table(ips), decreasing = TRUE), n = 6)
+
+#fail
+pattern="([0-9]+\\.){3}[0-9]+"
+ips =str_extract(df_failed$X1,pattern)
+ips = as.data.frame(ips)
+head(sort(table(ips), decreasing = TRUE), n = 6)
+
+#idx
+username_idx <- sub(".*\\buser\\s+(\\w+| ).*", "\\1", df_idx$X1)
+username_idx = as.data.frame(username_idx)
+head(sort(table(username_idx), decreasing = TRUE), n = 6)
+
+# This file has NO valid logins!
+
+```
+
+## Sudo commands: auth.log
+
+Auth2.log is the only table with sudo commands.
+
+#### auth2.log
+
+Let's look at the executables/programs run by sudo.
+
+```{r}
+
+sudo = auth2.log$message[auth2.log$app == "sudo"]
+COMMAND = grep("COMMAND", sudo)
+df_COMMAND = sudo[COMMAND]
+split_COMMAND = strsplit(df_COMMAND, ' ')
+values <- lapply(split_COMMAND, function(x) x[11])
+values <- unlist(values)
+commands = strsplit(values, '=')
+commands <- lapply(commands, function(x) x[2])
+commands <- unlist(commands)
+length(unique(commands))
+sort(table(commands), decreasing = TRUE)
+
+```
+
+Next, we will look at the users.
+The user pops up in two different places as either user or USER.
+
+```{r}
+USER = grep("USER", sudo)
+df_USER = sudo[USER]
+user = grep("user", sudo)
+df_user = sudo[user]
+
+split_USER = strsplit(df_USER, ' ')
+USER_values <- lapply(split_USER, function(x) x[[9]])
+USER_values <- unlist(user_values)
+unique(USER_values)
+table(USER_values)["USER=root"]
+table(USER_values)["PWD=/usr/share/filebeat/scripts"]
+table(USER_values)["PWD=/home/ubuntu"]
+
+split_user = strsplit(df_user, ' ')
+user_values <- lapply(split_user, function(x) x[[6]])
+user_values <- unlist(user_values)
+unique(user_values)
+table(user_values)["root"]
+table(user_values)[";"]
+split_user[split_user[[6]] == ";"]
+
+matching_indices <- sapply(split_user, function(x) x[6] == ";")
+matching_strings <- split_user[matching_indices]
+head(matching_strings, n = 1)
+
+```
+
+In the first batch of checking for usernames, I look for 'USER=" "' in the message fields corresponding to sudo actions.
+For these messages, every single user is root.
+I accidentally included some bad strings; however, they can be ignored due to their small size in comparison.
+
+In the second batch, we get root for all users as well, with the exception of five coereced semicolons.
+When I looked at these five strings, we see that the User is still root; it is just located in a different place.
+
+Lastly, let's look at the machine used.
+Sudo runs on the local host, so we just need the logging host itself.
+For file auth2.log, there is only one machine: ip-10-77-20-248.
+Return back
+
+```{r}
+machine = auth2.log$`logging host`[auth2.log$app == "sudo"]
+head(machine, n = 1)
+length(unique(machine))
+```
+
+```{r, include=FALSE}
+save.image (file = "my_work_space.RData")
+save(file = "completed_data.RData")
+```
