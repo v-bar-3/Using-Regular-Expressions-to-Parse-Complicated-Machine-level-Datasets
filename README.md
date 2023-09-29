@@ -13,13 +13,16 @@ The MergedAuth.log file on Canvas is the single file you need to process and ana
 
 Each log-file message is a single line, i.e., no message spans multiple lines.
 Consider 2 consecutive lines
+
 Nov 30 15:22:39 ip-172-31-27-153 sshd[22844]: Invalid user admin from 124.205.250.51
+
 Nov 30 15:22:39 ip-172-31-27-153 sshd[22844]: input_userauth_request: invalid user admin [preauth]
+
 These come from the log file auth.log identified by
 \# auth.log
 The structure of the first and most other lines is as follows:
+
 Nov 30 15:22:39 ip-172-31-27-153 sshd[22844]: Invalid user admin from 124.205.250.51
-|_____________| |______________| |__| |___| |____________________________________|
 date-time logging host app PID message
 <----------------- METADATA ---------------->
 
@@ -44,10 +47,15 @@ numbers?
 
 Logins - valid and invalid
 There are messages such as
+
 Mar 27 13:08:09 ip-10-77-20-248 sshd[1361]: Accepted publickey for ubuntu from 85.245.107.41 port 54259 ssh2 ..
+
 Dec 31 22:27:48 ip-172-31-27-153 sshd[8003]: Invalid user admin from 218.2.0.133
+
 Mar 28 20:21:20 ip-10-77-20-248 systemd-logind[1118]: New session 50 of user ubuntu.
+
 Mar 28 20:21:52 ip-10-77-20-248 sshd[30039]: Connection from 85.245.107.41 port 63502 on 10.77.20.248 port 2222
+
 Mar 28 22:36:12 ip-10-77-20-248 sshd[30174]: error: maximum authentication attempts exceeded for invalid user n
 
 • Find valid/successful logins
