@@ -16,7 +16,7 @@ Consider 2 consecutive lines
 Nov 30 15:22:39 ip-172-31-27-153 sshd[22844]: Invalid user admin from 124.205.250.51
 Nov 30 15:22:39 ip-172-31-27-153 sshd[22844]: input_userauth_request: invalid user admin [preauth]
 These come from the log file auth.log identified by
-# auth.log
+\# auth.log
 The structure of the first and most other lines is as follows:
 Nov 30 15:22:39 ip-172-31-27-153 sshd[22844]: Invalid user admin from 124.205.250.51
 |_____________| |______________| |__| |___| |____________________________________|
